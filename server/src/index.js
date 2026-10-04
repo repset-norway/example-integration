@@ -7,6 +7,7 @@ import repsetAuthRouter from "./auth-repset.js";
 import patientRouter from "./patients.js";
 import { SessionStore, deleteAllDatabaseData } from "./db.js";
 import cron from 'node-cron';
+import path from "node:path";
 
 const app = express();
 const port = 3000;

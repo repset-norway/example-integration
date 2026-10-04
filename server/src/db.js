@@ -1,10 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import session from "express-session";
 import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import path from "node:path";
 
-const dbPath = process.env.DB_PATH ?? join(import.meta.dirname, "..", "data", "database.db");
-mkdirSync(dirname(dbPath), { recursive: true });
+
+const dbPath = process.env.DB_PATH ?? path.join(import.meta.dirname, "..", "data", "database.db");
+mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new DatabaseSync(dbPath);
 
 // keep db tables in order of least -> most relationships to make sure deletion works
