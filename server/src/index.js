@@ -24,6 +24,11 @@ app.use(
     })
 );
 
+// trusting caddy proxy in production
+if (process.env.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+}
+
 // Serving frontend app. Used in production.
 const publicDir = path.resolve('public');
 app.use(express.static(publicDir));
