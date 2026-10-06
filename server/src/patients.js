@@ -107,6 +107,7 @@ router.post("/:id/program", async (req, res) => {
         "post",
         body
     );
+
     if (!createRedirectRes.ok) throw new Error("redirect request failed");
 
     const redirectData = await createRedirectRes.json();
