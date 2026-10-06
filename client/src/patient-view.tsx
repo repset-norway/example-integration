@@ -104,8 +104,12 @@ export const PatientView = (props: IPatientViewProps) => {
                 <Button
                     onClick={async () => {
                         const redirectUrl = await programActions.create();
-                        console.log(redirectUrl);
-                        // if (redirectUrl) setIframeUrl(redirectUrl);
+
+                        if (localStorage.getItem("debug") === "true") {
+                            console.log(redirectUrl);
+                        } else {
+                            if (redirectUrl) setIframeUrl(redirectUrl);
+                        }
                     }}
                 >
                     New program
