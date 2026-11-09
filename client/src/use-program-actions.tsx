@@ -16,7 +16,7 @@ export const useProgramActions = (patient: IPatient, refetch: () => unknown) => 
         }
 
         const data = await res.json();
-        return data.redirectUrl;
+        return data.statelessRedirectUrl;
     };
 
     const edit = async (programId: string): Promise<string | null> => {
@@ -34,7 +34,7 @@ export const useProgramActions = (patient: IPatient, refetch: () => unknown) => 
         }
 
         const data = await res.json();
-        return data.redirectUrl;
+        return data.statelessRedirectUrl;
     };
 
     const deleteProgram = async (programId: string) => {
@@ -69,7 +69,6 @@ export const useProgramActions = (patient: IPatient, refetch: () => unknown) => 
     };
 
     const print = async (programId: string) => {
-        console.log(programId);
         const res = await fetch(`/api/patients/${patient.id}/program/${programId}/print`, {
             method: "post",
         });

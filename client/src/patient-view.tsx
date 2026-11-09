@@ -23,7 +23,7 @@ export const PatientView = (props: IPatientViewProps) => {
 
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
-            if (!isRepsetIframeEvent(event.data)) return;
+            if (!isRepsetIframeEvent(event)) return;
 
             // Using events sent from Repset in the iframe to close the editor in time
             if (event.data.command === "editor_closed") {
@@ -70,7 +70,7 @@ export const PatientView = (props: IPatientViewProps) => {
     return (
         <div>
             {iframeUrl && (
-                <div className="absolute inset-0 z-2">
+                <div className="fixed inset-0 z-2">
                     <div className="relative size-full shadow-md bg-white">
                         <iframe src={iframeUrl} className="size-full" />
                     </div>
@@ -108,7 +108,7 @@ export const PatientView = (props: IPatientViewProps) => {
                         if (localStorage.getItem("debug") === "true") {
                             console.log(redirectUrl);
                         } else {
-                            if (redirectUrl) setIframeUrl(redirectUrl);
+                            setIframeUrl(redirectUrl);
                         }
                     }}
                 >

@@ -49,6 +49,29 @@ export const PatientList = (props: IPatientProps) => {
         refetch();
     };
 
+    const openRepset = async () => {
+        if (!isRepsetConnected) return alert("Connect to Repset account to use redirect");
+
+        // open new window before async operation to avoid popup blockers
+        const newWindow = window.open("about:blank", "_blank");
+        if (!newWindow) {
+            return alert("Failed to redirect");
+        }
+
+        const res = await fetch("/api/repset/open", {
+            method: "POST",
+        });
+
+        if (!res.ok) {
+            newWindow.close();
+            return alert("Failed to redirect");
+        }
+
+        const data = await res.json();
+        newWindow.location.href = data.sessionRedirectUrl;
+        newWindow.focus();
+    };
+
     const connectRepsetUser = async () => {
         const res = await fetch("/api/repset/init-link", { method: "POST" });
         const data = await res.json();
@@ -94,7 +117,13 @@ export const PatientList = (props: IPatientProps) => {
                 <div>
                     <div className="flex justify-between items-center mb-5">
                         <p className="font-semibold text-xl">Patients</p>
-                        <Button onClick={createPatient}>New patient</Button>
+
+                            <div className="flex gap-2">
+                                {isRepsetConnected && (
+                                    <Button variant="outline" onClick={openRepset}>Open Repset</Button>
+                                )}
+                                <Button onClick={createPatient}>New patient</Button>
+                            </div>
                     </div>
 
                     {patients?.length === 0 ? (

@@ -1,6 +1,8 @@
 import express from "express";
 import db from "./db.js";
 import { RepsetApiClient } from "./repset-api-client.js";
+import { getRepsetUser } from "./auth-repset.js";
+import { validate as uuidValidate } from 'uuid';
 
 const router = express.Router();
 
@@ -11,6 +13,9 @@ router.use((req, res, next) => {
 
     next();
 });
+
+const isValidPatientBody = (body) =>
+    typeof body?.name === "string" && (body.email == null || typeof body.email === "string");
 
 /**
  * List patients on user
@@ -47,6 +52,7 @@ router.get("/:id", async (req, res) => {
  */
 router.post("/", async (req, res) => {
     const { name, email } = req.body;
+    if (!isValidPatientBody(req.body)) return res.sendStatus(400);
 
     // Create Repset Customer if user has connected their Repset account
     const repsetUser = getRepsetUser(req.session.userId);
@@ -88,27 +94,40 @@ router.post("/:id/program", async (req, res) => {
     // Create Repset customer if not exist
     let repsetCustomerId = patient.repsetCustomerId;
     if (!repsetCustomerId) {
-        const body = JSON.stringify({ name: patient.name, email: patient.email ?? null });
+        const body = JSON.stringify({
+            name: patient.name,
+            email: patient.email ?? null,
+        });
+
         const createCustomerRes = await RepsetApiClient.fetch(
             `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/customers`,
             "post",
             body
         );
+
         if (!createCustomerRes.ok) throw new Error("Failed to create repset customer");
 
         const customerData = await createCustomerRes.json();
         repsetCustomerId = customerData.id;
+
+        db.prepare("UPDATE patients SET repsetCustomerId=? WHERE id=?").run(repsetCustomerId, patient.id);
     }
 
     // Create a Repset web-app redirect
-    const body = JSON.stringify({ target: "program.new", params: { customerId: repsetCustomerId }, appearance: { theme: "light" } });
+    const body = JSON.stringify({
+        customerId: repsetCustomerId,
+        appearance: { theme: "light" },
+    });
     const createRedirectRes = await RepsetApiClient.fetch(
-        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/redirects/web-app`,
+        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/redirects/programs/new`,
         "post",
         body
     );
 
-    if (!createRedirectRes.ok) throw new Error("redirect request failed");
+    if (!createRedirectRes.ok) {
+        // console.log(await createRedirectRes.text());
+        throw new Error("redirect request failed");
+    }
 
     const redirectData = await createRedirectRes.json();
     return res.json(redirectData);
@@ -126,9 +145,9 @@ router.put("/:id/program/:programId", async (req, res) => {
     if (!repsetUser) return res.sendStatus(403);
 
     // create a Repset web-app redirect
-    const body = JSON.stringify({ target: "program.edit", params: { programId: req.params.programId }, appearance: { theme: "light" } });
+    const body = JSON.stringify({ programId: req.params.programId, appearance: { theme: "light" } });
     const repsetRes = await RepsetApiClient.fetch(
-        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/redirects/web-app`,
+        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/redirects/programs/edit`,
         "post",
         body
     );
@@ -145,10 +164,14 @@ router.put("/:id/program/:programId", async (req, res) => {
  */
 router.post("/:id/program/:programId/email", async (req, res) => {
     const patient = getPatientForUser(req.params.id, req.session.userId);
-    if (!patient) res.sendStatus(404);
+    if (!patient) return res.sendStatus(404);
 
     const repsetUser = getRepsetUser(req.session.userId);
     if (!repsetUser) return res.sendStatus(403);
+
+    // to avoid path traversal
+    const programId = req.params.programId;
+    if (!uuidValidate(programId)) return res.sendStatus(400);
 
     const body = JSON.stringify({
         recipientName: patient.name,
@@ -156,7 +179,7 @@ router.post("/:id/program/:programId/email", async (req, res) => {
     });
 
     const repsetReq = await RepsetApiClient.fetch(
-        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/programs/${req.params.programId}/email`,
+        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/programs/${programId}/email`,
         "post",
         body
     );
@@ -175,13 +198,17 @@ router.post("/:id/program/:programId/email", async (req, res) => {
 router.post("/:id/program/:programId/print", async (req, res) => {
     const userId = req.session.userId;
     const patient = getPatientForUser(req.params.id, userId);
-    if (!patient) res.sendStatus(404);
+    if (!patient) return res.sendStatus(404);
 
     const repsetUser = getRepsetUser(userId);
     if (!repsetUser) return res.sendStatus(403);
 
+    // to avoid path traversal
+    const programId = req.params.programId;
+    if (!uuidValidate(programId)) return res.sendStatus(400);
+
     const repsetReq = await RepsetApiClient.fetch(
-        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/programs/${req.params.programId}/print`,
+        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/programs/${programId}/print`,
         "post",
         JSON.stringify({ exerciseSize: "medium" })
     );
@@ -201,10 +228,15 @@ router.delete("/:id/program/:programId", async (req, res) => {
     const userId = req.session.userId;
 
     const patient = getPatientForUser(req.params.id, userId);
-    if (!patient) res.sendStatus(404);
+    if (!patient) return res.sendStatus(404);
 
     const repsetUser = getRepsetUser(userId);
     if (!repsetUser) return res.sendStatus(403);
+
+
+    // to avoid path traversal
+    const programId = req.params.programId;
+    if (!uuidValidate(programId)) return res.sendStatus(400);
 
     const repsetReq = await RepsetApiClient.fetch(
         `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/programs/${req.params.programId}`,
@@ -223,17 +255,18 @@ router.delete("/:id/program/:programId", async (req, res) => {
 router.put("/:id", async (req, res) => {
     const userId = req.session.userId;
     const existing = getPatientForUser(req.params.id, userId);
-    if (!existing) res.sendStatus(404);
+    if (!existing) return res.sendStatus(404);
 
     const { name, email } = req.body;
+    if (!isValidPatientBody(req.body)) return res.sendStatus(400);
 
     const sql = `
         UPDATE patients
         SET name = ?, email = ?
-        WHERE id = ?
+        WHERE id = ? and userId = ?
     `;
 
-    db.prepare(sql).run(name ?? null, email ?? null, req.params.id);
+    db.prepare(sql).run(name ?? null, email ?? null, req.params.id, userId);
 
     const patient = getPatientForUser(req.params.id, userId);
 
@@ -320,27 +353,6 @@ function toPatientResponse(patient, programs) {
         email: patient.email,
         repsetCustomerId: patient.repsetCustomerId,
         programs: programs,
-    };
-}
-
-/**
- * Gets Repset user details
- *
- * Users in this application can have their Repset account connected
- * by storing the userId and companyId from Repset on the user record
- */
-function getRepsetUser(userId) {
-    const sql = `
-        SELECT id, repsetUserId, repsetSelectedCompanyId FROM users
-        WHERE id = ?
-    `;
-
-    const user = db.prepare(sql).get(userId);
-    if (!user.repsetSelectedCompanyId || !user.repsetUserId) return null;
-
-    return {
-        id: user.repsetUserId,
-        companyId: user.repsetSelectedCompanyId,
     };
 }
 

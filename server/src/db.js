@@ -28,6 +28,8 @@ db.exec(`
     );
 `);
 
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);`);
+
 db.exec(`
     CREATE TABLE IF NOT EXISTS patients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

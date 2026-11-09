@@ -7,13 +7,26 @@ interface RepsetIframeEvent {
     payload?: unknown;
 }
 
-export function isRepsetIframeEvent(data: unknown): data is RepsetIframeEvent {
+const isRepsetOrigin = (origin: string) => {
+    try {
+        const { protocol, hostname } = new URL(origin);
+        if (import.meta.env.DEV) return hostname === "localhost";
+
+        return protocol === "https:" && (hostname === "repset.io" || hostname.endsWith(".repset.io"));
+    } catch {
+        return false;
+    }
+};
+
+export function isRepsetIframeEvent(event: MessageEvent): event is MessageEvent<RepsetIframeEvent> {
+    const data = event.data;
     return (
+        isRepsetOrigin(event.origin) &&
         typeof data === "object" &&
         data !== null &&
-        (data as any).source === "repset" &&
-        (data as any).version === 1 &&
-        (data as any).type === "event" &&
-        typeof (data as any).command === "string"
+        data.source === "repset" &&
+        data.version === 1 &&
+        data.type === "event" &&
+        typeof data.command === "string"
     );
 }

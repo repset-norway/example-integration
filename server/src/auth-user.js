@@ -1,10 +1,10 @@
 import express from "express";
 import db from "./db.js";
-import crypto from "node:crypto";
+import argon2 from "argon2"
+import { rateLimit } from "express-rate-limit";
+
 
 const router = express.Router();
-
-const createHash = (password) => crypto.createHash("sha256").update(password).digest("hex");
 
 /**
  * Info about authorized user
@@ -24,13 +24,28 @@ router.get("/me", (req, res) => {
     return res.json(user);
 });
 
+const regenerateSession = (req) =>
+    new Promise((resolve, reject) => req.session.regenerate((err) => (err ? reject(err) : resolve())));
+
+const loginLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    ipv6Subnet: 52,
+    message: { error: "Too many login attempts, try again in a minute" },
+    skipSuccessfulRequests: true,
+});
+
 /**
  * Log into example application
  * Create user if it doesn't exist for simplicity
  */
-router.post("/login", express.json(), (req, res) => {
+router.post("/login", loginLimiter, express.json(), async (req, res) => {
     // Simplified login system since this is a demo application.
     // A real production app should have a lot more security features.
+
+    await regenerateSession(req);
 
     const { username, password } = req.body;
 
@@ -38,12 +53,15 @@ router.post("/login", express.json(), (req, res) => {
         return res.status(400).json({ error: "Missing username or password" });
     }
 
-    const passwordHash = createHash(password);
+    if (typeof username !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ error: "username and password must be strings" });
+    }
 
     let user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
 
     // Create user if it doesn't exist
     if (!user) {
+        const passwordHash = await argon2.hash(password);
         const result = db.prepare("INSERT INTO users (username, passwordHash) VALUES (?, ?)").run(username, passwordHash);
 
         const userId = result.lastInsertRowid;
@@ -57,7 +75,8 @@ router.post("/login", express.json(), (req, res) => {
         });
     }
 
-    if (user.passwordHash !== passwordHash) {
+    const isValidLogin = await argon2.verify(user.passwordHash, password);
+    if (!isValidLogin) {
         return res.sendStatus(401);
     }
 

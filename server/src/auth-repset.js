@@ -73,16 +73,16 @@ router.get("/accept-link", async (req, res) => {
 
     const userId = req.session.userId;
 
-    // Link your user to the repset user
-    db.prepare(`UPDATE users SET repsetUserId = ? WHERE id = ?`).run(repsetUserId, userId);
-
     const apires = await RepsetApiClient.fetch(`/api/v1/users/${repsetUserId}`);
     const repsetUserData = await apires.json();
 
     // Most users are connected to a single Repset company.
     // If a user has access to multiple companies, they must be able to choose which one to link.
     const repsetCompanyId = repsetUserData["companies"][0]["id"];
-    db.prepare(`UPDATE users SET repsetSelectedCompanyId = ? WHERE id = ?`).run(repsetCompanyId, userId);
+
+    // Link your user to the repset user
+    db.prepare(`UPDATE users SET repsetUserId = ?, repsetSelectedCompanyId = ? WHERE id = ?`)
+        .run(repsetUserId, repsetCompanyId, userId);
 
     res.redirect(process.env.FRONTEND_URL);
 });
@@ -92,7 +92,48 @@ router.delete("/delete-link", async (req, res) => {
     if (!userId) return res.sendStatus(401);
 
     db.prepare(`UPDATE users SET repsetUserId = ?, repsetSelectedCompanyId = ? WHERE id = ?`).run(null, null, userId);
+    db.prepare(`UPDATE patients SET repsetCustomerId = NULL WHERE userId = ?`).run(userId);
     res.sendStatus(204);
 });
+
+router.post("/open", async (req, res) => {
+    const repsetUser = getRepsetUser(req.session.userId);
+    if (!repsetUser) return res.sendStatus(403);
+
+    // Create a Repset web-app redirect
+    const createRedirectRes = await RepsetApiClient.fetch(
+        `/api/v1/companies/${repsetUser.companyId}/users/${repsetUser.id}/redirects/home`,
+        "post"
+    );
+
+    if (!createRedirectRes.ok) throw new Error("redirect request failed");
+
+    const redirectData = await createRedirectRes.json();
+    return res.json(redirectData);
+});
+
+
+/**
+ * Gets Repset user details
+ *
+ * Users in this application can have their Repset account connected
+ * by storing the userId and companyId from Repset on the user record
+ */
+export function getRepsetUser(userId) {
+    const sql = `
+        SELECT id, repsetUserId, repsetSelectedCompanyId FROM users
+        WHERE id = ?
+    `;
+
+    const user = db.prepare(sql).get(userId);
+    if (!user.repsetSelectedCompanyId || !user.repsetUserId) return null;
+
+    // In a real app you would want to check that the Repset user also exist in Repset and have access to that company (might have been deleted / moved)
+
+    return {
+        id: user.repsetUserId,
+        companyId: user.repsetSelectedCompanyId,
+    };
+}
 
 export default router;

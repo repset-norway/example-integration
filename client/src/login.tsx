@@ -48,6 +48,8 @@ export const Login = () => {
                     </form>
                 )}
             </Card>
+
+            <p className="text-center mt-10">Demo app <b>database is wiped every sunday</b> for security purposes</p>
         </Layout>
     );
 };
